@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bhi-hbhi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bhi-hbhi
+  template:
+    spec:
+      containers:
+      - image: rsecr4aks.azurecr.io/malaria-bdi-hbhi
+        imagePullPolicy: Always
+        name: bhi-hbhi
+        ports:
+        - containerPort: 3838
+          name: shiny-port
+        readinessProbe:
+          httpGet:
+            path: /malaria-bdi-hbhi/
+            port: 3838
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources: {}
+      restartPolicy: Always
+      serviceAccountName: ""

@@ -1,0 +1,7 @@
+namespace: malaria-apps
+
+bases:
+  - ../base
+
+resources:
+  - ingress.yaml

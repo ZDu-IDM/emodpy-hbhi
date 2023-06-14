@@ -1,0 +1,747 @@
+---
+title: "create_seasonality_archetypes_BDI"
+author: "Monique Ambrose"
+date: "February 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true
+---
+
+```{r commented_intro, include=FALSE, echo=FALSE}
+
+#################################################################################################
+# High burden, high impact -> Spatial Clustering
+#
+# Master script that coordinates the creation of seasonality clusters
+#    should contain DS which are expected to have similar seasonality and vector composition.
+#    
+#
+# Steps:
+# 1) Read in relevant rastor files that will serve as the clustering variables. Clip and mask 
+#     to relevant geographic area. Align so that each cell in one raster matches with 
+#     the same location in all other rasters.
+# 2) Calculate mean variable value within each admin (clustering is now done at an admin level, 
+#     not a pixel level)
+# 3) Rescale the range of values for each variable (to avoid weighting one variable as more 
+#     important simply because there is a larger range of values). Weight each variable 
+#     according to expected/desired importance by adjusting the range.
+# X) Singular value decomposition (SVD) - not currently used, but may be added if the number 
+#     of variables increases and clustering takes too long.
+# 4) Clustering step: any one of a number of clustering algorithms could be used here to find 
+#    the DS that are most similar to one another (based on mean DS variable values). Currently,
+#    k-means and CLARA algorithms are used.
+#
+# Note: this is a relatively simplistic and targeted treatment of the problem. For a more thorough, 
+#    flexible, and general approach, I recommend looking at scripts in Amelia Bertozzi-Villa's 
+#    malaria-atlas-project/seasonal_classification repo:
+#  https://github.com/InstituteforDiseaseModeling/malaria-atlas-project/tree/master/seasonal_classification
+#
+#################################################################################################
+
+
+```
+
+# Introduction 
+
+## Project goals and general approach
+
+The broader goal of this project is to explore the effect of different intervention packages in each of the Sierra Leone chiefdoms. Here, we use a clustering approach to partition the admins into clusters or archetypes (each admin will belong to one of the archetypes) with similar seasonality and vector composition.
+
+
+
+</br>
+
+
+## This document
+
+This document walks through the steps taken to perform the clustering, form curating the input files, to generating clusters, to exploring the values of variables in each cluster.
+
+  1) Prepare raster layers (input variables), admin shapefile, and calculate mean values in each admin
+  
+    * Create shapefile for health districts with the same CRS as input rasters
+    * Standardize projection and resolution (align pixels) for all raster layers
+    * Find (unweighted) mean variable values among all pixels in an admin
+    * Rescale variable according to the importance/weight we want it to have when clusters are formed
+
+
+  2) Run clustering algorithm
+  
+  3) Explore clustering results
+
+
+</br>
+
+
+
+# Setup and file locations
+
+<font size="5">   - Code </font>
+
+  * Git repo [here](https://github.com/numalariamodeling/hbhi-spatial-clustering)
+  
+
+<font size="5">   - Input raster files </font>
+
+  
+  * Saved directly in subdirectories of Dropbox (IDM)/Malaria Team Folder/projects/burundi_hbhi/SpatialClustering/input_layers (https://www.dropbox.com/home/Malaria%20Team%20Folder/projects/burundi_hbhi/SpatialClustering/input_layers)
+  
+    * Rainfall and tsi rasters from Amelia's folder in Dropbox: Malaria Team Folder/projects/map_intervention_impact/seasonal_classification/africa/rasters
+    * Vector, travel time to city, ITN coverage, and PfPR(2-10) rasters downloaded from [MAP's website](https://map.ox.ac.uk/explorer/#/) July 2019.
+
+
+
+<font size="5">   - Input shape files </font>
+
+  * Country and admin borders: Dropbox (IDM)/Malaria Team Folder/projects/burundi_hbhi/shapefiles_rasterfiles/bdi_adm_igebu_ocha/bdi_admbnda_adm2_igebu_ocha_20171103.shp (https://www.dropbox.com/home/Malaria%20Team%20Folder/projects/burundi_hbhi/shapefiles_rasterfiles)
+
+
+<font size="5">   - Directory setup for raster file inputs and clustering results </font>
+
+Within a directory named SpatialClustering, subdirectories must be as follows:
+
+  * aligned_layers
+  * clustering_results
+  * input_layers - must have one subdirectory for each variable type, each of which must contain relevant rasters
+    * rain
+    * tsi
+    * vector
+  * unscaled_layers
+  
+
+
+
+
+</br>
+
+
+
+</br>
+
+
+# Prepare boundary shapefiles and raster layers
+
+## Admin shapefile
+
+Transform existing shapefile with admin borders so that it has the same CRS as the raster files that will be used as clustering variables
+
+```{r DS_boundaries_shapefile, results='hide', message=FALSE, warning=FALSE}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -                               Setup                                 - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+
+library(rgdal)
+library(raster)
+library(stats)
+library(viridis)
+library(factoextra)
+
+
+#=============================================================================#
+############               USER SPECIFIED INPUTS                 ##############
+#=============================================================================#
+
+# set base filepaths
+base_filepath_scripts = 'C:/Users/moniqueam/Documents/malaria-snt-core/archetype_clustering'
+base_filepath_project = 'C:/Users/moniqueam/Dropbox (IDM)/Malaria Team Folder/projects/burundi_hbhi/snt_2023'
+base_filepath_raster = paste0(base_filepath_project, '/SpatialClustering')
+ds_shapefile_unprojected_filepath = paste0(base_filepath_raster, '/input_shapefiles/admin_shp/District Sanitaire Burundi.shp')
+unmasked_reference_raster_filename = paste(base_filepath_raster, '/input_layers/rain/rainfall_month_01.tif', sep='')
+  
+# specify the name of shapefile's attribute that identifies the name of the districts/admin2s (or whatever admin level is being used for clustering)
+admin_attribute_name = 'NOM_DS'  # 'NOMDEP'
+region_attribute_name = 'PROVINCE' # 'NOMREGION'
+
+overwrite_file_flag = FALSE
+# determine whether aligned/scaled rasters should be overwritten if they already exist
+overwrite_raster_flag = FALSE
+# specify the maximum number of clusters to create (e.g. for elbow plot)
+max_num_clusters = 10
+# specify whether routine case surveillance data is available and appropriately formatted
+case_data_available = FALSE
+
+# specify variable types to be included in determining archetypes (to change weights, see section below)
+# options are
+#   'climate_vector' - create archetypes based on climate and vector
+#   'climate_vector_proximity' - create archetypes based on climate, vector, and admin proximity to one another
+#   'climate_vector_proximity_pre2010itn'
+#   'climate_vector_proximity_pre2010itn_MIS2016'
+#   'case_seasonality' - use the seasonality patterns of (rescaled) cases in each DS to create archetypes  NOTE: this will only be supported after we get the routine surveillance data
+#   'climate_vector_proximity_pre2010itn_caseSeasonality' 
+clustering_type = 'climate_vector_proximity_pre2010itn'  
+
+#=============================================================================#
+
+setwd(base_filepath_scripts)
+
+reference_raster_filename = paste(base_filepath_raster, '/reference_rasters_shapefiles/cropped_projection_reference.tif', sep='')
+ds_shapefile_filepath = paste0(base_filepath_raster, '/reference_rasters_shapefiles/bdi_adm2.shp')
+
+
+
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -   Create output directories for this project if they do not already exist    - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+if (!dir.exists(paste0(base_filepath_raster, '/aligned_layers')))  dir.create(paste0(base_filepath_raster, '/aligned_layers'))
+if (!dir.exists(paste0(base_filepath_raster, '/clustering_results'))) dir.create(paste0(base_filepath_raster, '/clustering_results'))
+if (!dir.exists(paste0(base_filepath_raster, '/unscaled_layers'))) dir.create(paste0(base_filepath_raster, '/unscaled_layers'))
+if (!dir.exists(paste0(base_filepath_raster, '/reference_rasters_shapefiles'))) dir.create(paste0(base_filepath_raster, '/reference_rasters_shapefiles'))
+if (!dir.exists(paste0(base_filepath_raster, '/input_layers/centroid'))) dir.create(paste0(base_filepath_raster, '/input_layers/centroid'))
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -   Prepare reference raster and shapefile with appropriate projection and masking    - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# check whether the file already exists
+if ((!file.exists(ds_shapefile_filepath)) | (!file.exists(reference_raster_filename))){
+  # read in DS shapefile with different projection than raster files
+  ds_shapefile_unprojected = shapefile(ds_shapefile_unprojected_filepath)
+  # change the shapefile's admin attribute name to 'NOMDEP' so that it is referenced correctly in this script
+  names(ds_shapefile_unprojected)[names(ds_shapefile_unprojected) == admin_attribute_name] = 'NOMDEP'
+  names(ds_shapefile_unprojected)[names(ds_shapefile_unprojected) == region_attribute_name] = 'NOMREGION'
+  # read in one of the input raster files (projection and resolution will be used for all future rasters/shapefiles)
+  unmasked_raster = raster(unmasked_reference_raster_filename)
+  # need to reproject shapefile so that it will have the same projection as the reference raster
+  ds_shapefile = spTransform(ds_shapefile_unprojected, crs(unmasked_raster))
+  # save shapefile as country/ds shapefile for all raster creations
+  shapefile(ds_shapefile, filename=ds_shapefile_filepath)
+  # crop and mask the raster to the current country borders
+  cropped_projection_reference = crop(unmasked_raster, ds_shapefile)
+  cropped_projection_reference = mask(cropped_projection_reference, ds_shapefile)
+  # save reference raster
+  writeRaster(cropped_projection_reference, reference_raster_filename)
+}
+
+
+
+```
+
+Saves a reference raster and shapefile (to be used for the projection and resolution in future analyses) in reference_rasters_shapefiles folder.
+
+</br>
+
+
+
+
+</br>
+
+
+## Calculate the mean monthly cases in each DS (if this is available and will be included in clustering)
+
+```{r monthly_cases_each_ds, results='hide', message=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.show='hold'}
+# only do this if the routine surveillance data is available
+if(case_data_available){
+  source(paste0(base_filepath_scripts, '/prepare_clustering_inputs/calculate_mean_monthly_cases_each_DS.R'))
+  calculate_mean_monthly_cases_each_DS(base_filepath_raster, ds_shapefile_filepath, BF_montly_case_data_filepath, var_weight_string, plot_flag=TRUE, use_susp_flag=TRUE)
+}
+
+```
+
+<b> Each line shows the mean monthly suspected+confirmed cases per 1000 (left) or rescaled according to the maximum cases in a year (right) for an admin, colored according to admin's region.</b> 
+
+The generated csv and raster files are saved in input_layers/caseSeasonalityDS.
+
+
+
+</br>
+
+
+## Save latitude and longitude of centroid for each admin
+
+```{r centroid_locations, results='hide', message=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.show='hold'}
+source(paste0(base_filepath_scripts, '/prepare_clustering_inputs/save_admin_centroid_coords.R'))
+
+save_admin_centroids(base_filepath_raster=base_filepath_raster, ds_shapefile_filepath=ds_shapefile_filepath)
+```
+
+</br>
+
+
+
+## Specify variables and weights used in clustering
+
+Weights for each variable type:
+
+```{r specify_variable_type_weights, echo=FALSE}
+
+
+# specify variable types and desired weights
+#------------------------------------#
+# seasonality-archetype clusterings
+#------------------------------------#
+if(clustering_type == 'climate_vector'){
+  variable_type_names = c('vector', 'rain', 'tsi')
+  variable_type_weights = c(1, 3, 2)
+  
+}  else if(clustering_type == 'climate_vector_proximity'){
+  variable_type_names = c('vector', 'rain', 'tsi', 'centroid')
+  variable_type_weights = c(1, 3, 2, 2)
+  
+} else if (clustering_type == 'climate_vector_proximity_pre2010itn'){
+  variable_type_names = c('vector', 'rain', 'tsi', 'centroid', 'pre2010itn')
+  variable_type_weights = c(1, 3, 2, 2, 2)
+  
+} else if (clustering_type == 'climate_vector_proximity_pre2010itn_MIS2016'){
+  variable_type_names = c('vector', 'rain', 'tsi', 'centroid', 'pre2010itn', 'MIS2016')
+  variable_type_weights = c(1, 3, 2, 2, 2, 3)
+  
+}  else if (clustering_type == 'climate_vector_proximity_pre2010itn_caseSeasonality'){
+  variable_type_names = c('vector', 'rain', 'tsi', 'centroid', 'pre2010itn', 'rescaledCaseSeasonalityDS')
+  variable_type_weights = c(1, 3, 2, 2, 2, 4)
+  
+}else{
+  warning('clustering type not recognized')
+} 
+
+# weights for each variable type included in filepath
+var_weight_string = paste(variable_type_names[1], variable_type_weights[1], sep='')
+if(length(variable_type_names)>1){
+  for (i_var in 2:length(variable_type_names)){
+    var_weight_string = paste(var_weight_string, '_', variable_type_names[i_var], variable_type_weights[i_var], sep='')
+  }
+}
+
+
+# check if the directories for this combination of variable weights exist; if not, create the directories
+if (!dir.exists(paste(base_filepath_raster, '/aligned_layers/', var_weight_string, sep=''))){
+  dir.create(paste(base_filepath_raster, '/aligned_layers/', var_weight_string, sep=''))
+  print('creating new aligned_layers/ directory for this variable weighting')
+}
+if (!dir.exists(paste(base_filepath_raster, '/clustering_results/', var_weight_string, sep=''))){
+  dir.create(paste(base_filepath_raster, '/clustering_results/', var_weight_string, sep=''))
+  dir.create(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures', sep=''))
+  print('creating new clustering_results/ directory for this variable weighting')
+}
+
+
+# output message to view variable weights
+for (i_var in 1:length(variable_type_names)){
+  print(paste(variable_type_names[i_var], ': ', variable_type_weights[i_var], sep=''))
+}
+```
+
+</br>
+
+
+</br>
+
+
+
+
+
+## Get values of each variable in chiefdoms, taking the mean of all pixels in the chiefdom
+
+
+Read in, clip, mask, align the rastor files that will serve as the clustering variables. Find the mean variable values among all pixels in the same chiefdom and save results as a csv fileS.
+
+```{r get_DS_means, results='hide', message=FALSE, warning=FALSE}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -               Prepare raster input files                            - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+
+# load raster-preparation functions
+source(paste0(base_filepath_scripts, '/prepare_clustering_inputs/extract_raster_values.R'))
+
+# list of all .tiff files in directories
+variable_type_files = list()
+for(vv in 1:length(variable_type_names)){
+  variable_type_files[[vv]] =  list.files(path=paste(base_filepath_raster, '/input_layers/', variable_type_names[vv], sep=''), pattern="*.{0,3}tiff?", full.names=TRUE, recursive=FALSE)
+  # remove any files that contain '.aux.xml'
+  remove_indices = grep('.aux.xml', variable_type_files[[vv]])
+  if (length(remove_indices)>0){
+    variable_type_files[[vv]] = variable_type_files[[vv]][-remove_indices]
+  }
+}
+
+# read in, clip, mask, align, and weight the rastor files that will serve as the clustering variables
+get_mean_ds_value_from_raster(base_filepath_raster=base_filepath_raster, 
+                    ds_shapefile_filepath=ds_shapefile_filepath, 
+                    variable_type_names=variable_type_names,
+                    variable_type_files=variable_type_files, 
+                    overwrite_raster_flag=overwrite_raster_flag)
+
+
+```
+
+
+
+Rescale the input variable files to reflect the desired weights
+
+```{r variable_weights_rescale, message=FALSE, warning=FALSE}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -                  Rescaled values in each admin                      - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+
+
+
+variable_weights_rescale(base_filepath_raster=base_filepath_raster,
+                         variable_type_names=variable_type_names,
+                         variable_type_weights=variable_type_weights,
+                         variable_type_files=variable_type_files,
+                         var_weight_string=var_weight_string,
+                         overwrite_raster_flag=overwrite_raster_flag)
+
+
+
+# read in dataframe that gives information on the variables, variable types, and weights (csv file created in align_input_rasters() function)
+variable_record_df = read.csv(paste(base_filepath_raster, '/aligned_layers/', var_weight_string, '/variable_information.csv', sep=''))
+
+# store vector of unscaled and rescaled ('aligned') raster filenamess - keep in vector in same order as saved in variable_record_df csv file created in align_input_rasters() function
+unscaled_files = c()
+aligned_files = c()
+for(ii in 1:length(variable_record_df[,1])){
+  unscaled_files = c(unscaled_files, paste(base_filepath_raster, '/unscaled_layers/', sub('aligned', 'unscaled', variable_record_df$variable_filename_vector[ii]), sep=''))
+  aligned_files = c(aligned_files, paste(base_filepath_raster, '/aligned_layers/', var_weight_string, '/', variable_record_df$variable_filename_vector[ii], sep=''))
+}
+
+
+```
+
+
+
+</br>
+
+
+</br>
+
+
+
+
+
+
+# Run clustering algorithm
+
+Use k-means and the CLARA algorithms to perform clustering - repeat with different numbers of total clusters:
+
+```{r run_clustering_algorithms, message=FALSE, warning=FALSE}
+
+source(paste0(base_filepath_scripts, '/prepare_clustering_inputs/cluster_by_DS_mean.R'))
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -                  Clustering at DS level                             - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+num_clusters_vect = 1:max_num_clusters
+create_new_clusters_flag = !file.exists(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', 1, 'clusters.RData', sep=''))
+if (create_new_clusters_flag){
+  kmeans_ss_DS = cluster_DS_means(base_filepath_raster, ds_shapefile_filepath, variable_record_df, var_weight_string, aligned_files, num_clusters_vect)
+}
+
+
+
+
+```
+
+
+
+
+
+
+
+
+```{r, plot_cluster_output, echo = FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=12}
+par(mfrow=c(3,2), mar=c(0.1, 0.1, 1, 0.1))
+
+# load shapefile for Burkina Faso health districts
+ds_shapefile = shapefile(ds_shapefile_filepath)
+
+num_clusters_plot = c(1, 3, 4, 5, 7, 9)
+for(ii in 1:length(num_clusters_plot)){
+  num_clusters=num_clusters_plot[ii]
+
+  
+  
+  # load in kmeans output for this number of clusters - kmeans_output and clara_output variables are loaded
+  load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', num_clusters, 'clusters.RData', sep=''))
+  # get the names of the DS used as medoids
+  DS_representative_ids = clara_output$i.med
+  
+  # plot coloring DS according to archetype DS
+  clust_cols = rainbow(num_clusters, alpha=0.2)[clara_output$clustering]
+  clust_cols[DS_representative_ids] = rainbow(num_clusters, alpha=0.6)
+
+  
+  plot(ds_shapefile, col=clust_cols, main=paste(num_clusters,'archetypes'))
+
+}
+
+
+par(mfrow=c(1,1))
+
+```
+
+<b>Clustering results.</b> CLARA with different numbers of clusters. Each color corresponds to an archetype; the representative DS for each archetype is shown in a darker color. 
+
+
+
+Representative DS when different numbers of clusters are used:
+
+```{r print_representative_DS}
+num_clusters_print = c(3, 4, 7, 9)
+for(ii in 1:length(num_clusters_print)){
+  # load in clustering output for this number of clusters - kmeans_output and clara_output variables are loaded
+  load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', num_clusters_print[ii], 'clusters.RData', sep=''))
+  
+  print(paste('representative DS for ', num_clusters_print[ii], ' archetypes: ', sep=''))
+  print(ds_shapefile$NOMDEP[clara_output$i.med])
+
+}
+
+
+```
+
+</br>
+
+## Restore original variable values and assign to each cluster
+
+```{r restore_variable_values, message=FALSE, warning=FALSE}
+
+
+if (create_new_clusters_flag | !file.exists(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_kmeans_centroids_', num_clusters,'clusters.csv', sep='')) | !file.exists(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_clara_medoids_', num_clusters,'clusters.csv', sep=''))){
+  # load functions for calculating centroid values for each cluster
+  source(paste0(base_filepath_scripts, '/explore_clustering_results/restore_raster_values.R'))
+  for(i_c in 1:max_num_clusters){
+    # load in kmeans output for this number of clusters - kmeans_output and clara_output variables are loaded
+    load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', i_c, 'clusters.RData', sep=''))
+    # run function to calculate original/restored variable values for each of the cluster centroids and save as csv
+    restore_variable_values(base_filepath_raster, var_weight_string, unscaled_files, variable_record_df, kmeans_output, num_clusters=i_c, clara_output, include_clara_flag=TRUE, pixel_flag = FALSE)
+  }
+
+}
+
+
+num_clusters = 4
+# read in results and print a part of the table
+clara_medoid_restored_values = read.csv(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/restored_values_each_cluster/DS_clara_medoids_', num_clusters,'clusters.csv', sep=''))[-1]
+
+# determine which columns to include in printed table
+col_indices = c(which(variable_record_df$variable_type_vector=='vector'), which(variable_record_df$variable_type_vector=='rain')[c(4, 10)]) 
+if(grepl('pre2010itn', clustering_type)){
+  col_indices = c(col_indices, which(variable_record_df$variable_type_vector=='pre2010itn')[3])
+}
+
+print(clara_medoid_restored_values[1:5, unique(sort(col_indices))])
+  
+```
+Creates a csv file clustering_results/{parameter_weighting_of_interest}/DS_kmeans_centroids_{num_clusters}clusters.csv that gives the restored variable value for the centroid of each cluster. 
+
+
+</br>
+
+</br>
+
+
+# Explore clustering results
+
+## Elbow method
+
+Explore the optimal number of clusters. However, note that for our purposes this is less relevant than making sure that we have enough clusters to appropriately capture all major seasonality patterns in the country.
+
+```{r elbow_method, message=FALSE, warning=FALSE}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -           Elbow method for determining number of clusters           - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# Calculate how much variance is explained for each number of clusters
+pdf_flag=TRUE
+
+
+if (create_new_clusters_flag){
+  # save results in csv file
+  kmeans_sum_squares_results = matrix(nrow=3, ncol=length(num_clusters_vect))
+  kmeans_sum_squares_results[1,] = kmeans_ss_DS[[1]]  # betweenss_vect
+  kmeans_sum_squares_results[2,] = kmeans_ss_DS[[2]]  # sum_withinss_vect
+  kmeans_sum_squares_results[3,] = kmeans_ss_DS[[3]]  # totss_vect
+  rownames(kmeans_sum_squares_results) = c('between_ss', 'sum_within_ss', 'total_ss')
+  colnames(kmeans_sum_squares_results) = num_clusters_vect
+  
+  write.csv(kmeans_sum_squares_results, paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_kmeans_elbow_min_', min(num_clusters_vect), '_max', max(num_clusters_vect),'.csv', sep=''))
+}
+
+# determine whether to plot kmeans or clara result
+plot_clara = TRUE
+
+if(plot_clara){
+  # read in dataframe of the weighted variable values for each DS (used in clustering)
+  ds_means_df = read.csv(paste(base_filepath_raster, '/aligned_layers/', var_weight_string, '/mean_rescaled_values_each_DS.csv', sep=''))[,-1]
+  
+   if(pdf_flag){
+    pdf_filename = paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/optimal_number_clusters_clara.pdf', sep='')
+    pdf(pdf_filename, width=6, height=4)
+  }
+
+  # create three plots: one for each of the methods to find the optimal number of clusters
+  fviz_nbclust(as.matrix(ds_means_df[,-1]), clara, method = "wss", k.max=max(num_clusters_vect)) +
+    labs(subtitle = "Elbow method")
+  # fviz_nbclust(as.matrix(ds_means_df[,-1]), clara, method = "silhouette", k.max=max(num_clusters_vect)) +
+  #   labs(subtitle = "Silhouette method")
+  # fviz_nbclust(as.matrix(ds_means_df[,-1]), clara, method = "gap_stat", k.max=max(num_clusters_vect)) +
+  #  labs(subtitle = "Gap statistic method")
+  
+  if(pdf_flag){
+    dev.off()
+  }
+  
+} else{
+  # read in previously-saved results
+  kmeans_sum_squares_results = read.csv(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_kmeans_elbow_min_', min(num_clusters_vect), '_max', max(num_clusters_vect),'.csv', sep=''), header=TRUE)[,-1]
+  rownames(kmeans_sum_squares_results) = c('between_ss', 'sum_within_ss', 'total_ss')
+  colnames(kmeans_sum_squares_results) = num_clusters_vect
+  
+  # create elbow plot to explore optimal number of clusters
+  if(pdf_flag){
+    pdf_filename = paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/elbow_plot_kmeans.pdf', sep='')
+    pdf(pdf_filename, width=10, height=6)
+  }
+  plot(num_clusters_vect, (kmeans_sum_squares_results[1,] / kmeans_sum_squares_results[3,]), type='b', bty='L', ylab='between SS / total SS', xlab='number of clusters')
+  if(pdf_flag){
+    dev.off()
+  }
+}
+
+
+```
+
+<b>Variance explained as a function of the number of clusters.</b> 
+
+
+</br>
+
+## Compare original variable values with clustered values
+
+For each pixel in the country, we can visually examine how similar the original, DS-mean, and cluster-assigned variable values are. The below plots show a select handful of variables/layers. A pdf with all variables will also be created.
+
+
+
+```{r compare_original_clustered, message=FALSE, warning=FALSE, fig.width=8, fig.height=22, fig.show='hold'}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -   Plot comparison of original variable layers and clustered values  - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+source(paste0(base_filepath_scripts, '/explore_clustering_results/compare_variables_original_DS_clustering.R'))
+# 
+# # calculate origina, DS-mean, and clustered pixel values for all variables
+# compare_variables_original_DS_clustering(base_filepath_raster, ds_shapefile_filepath, var_weight_string, unscaled_files, variable_record_df, num_clusters, plot_flag=TRUE, pdf_flag=TRUE, subset_plot_indices=c())
+#   
+# # plot pixel values and difference between true and clustered pixel values
+# plot_error_DS_clustering(base_filepath_raster, var_weight_string, num_clusters, pdf_flag=TRUE, show_error_flag=FALSE, subset_plot_indices=col_indices)
+
+
+```
+</br>
+
+<b>Comparison of original pixel values (left), mean-DS values (center) and clustered values (right) for a handful of variable layers (rows). </b>
+
+</br>
+
+
+</br>
+</br>
+
+### Look at difference between original admin values and values after clustering for different numbers of clusters
+
+```{r violin_plot_abs_errors, message=FALSE, warning=FALSE, fig.width=8, fig.height=22, fig.show='hold'}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+# -   Plot violin plot of differences between original variable layers and clustered values  - #
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - #
+violin_plot_clust_error(base_filepath_raster=base_filepath_raster, var_weight_string=var_weight_string, max_num_clust=max_num_clusters)
+
+
+```
+Pdf saved with violin plots of absolute difference between original and clustered values in each admin.
+
+
+
+
+
+</br>
+
+## Examine whether monthly case patterns are consistent within an archetype (if the routine case data for this country are available and appropriately formatted)
+
+### 3 clusters
+```{r plot_monthly_cases_by_archetype_3clust, message=FALSE, warning=FALSE, fig.width=8, fig.height=8, fig.show='hold'}
+# only do this if the routine surveillance data is available
+if(case_data_available){
+  num_clusters = 3
+  # load in clustering output for this number of clusters - kmeans_output and clara_output variables are loaded
+  load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', num_clusters, 'clusters.RData', sep=''))
+  
+  pdf_filename = paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/mean_monthly_cases_by_archetype_', num_clusters, 'clusters.pdf', sep='')
+  plot_monthly_cases_by_archetype(base_filepath_raster, ds_shapefile_filepath, num_clusters, clara_output, show_susp_flag=TRUE, show_rescaled_flag=TRUE, show_subplots_flag=TRUE, pdf_flag=FALSE, pdf_filename=pdf_filename)
+}
+```
+
+<b>Rescaled mean case counts within each DS.</b> Each subplot shows the results for DS in an archetype.
+
+
+
+### 5 clusters
+```{r plot_monthly_cases_by_archetype_5clust, message=FALSE, warning=FALSE, fig.width=8, fig.height=12, fig.show='hold'}
+# only do this if the routine surveillance data is available
+if(case_data_available){
+  num_clusters = 5
+  # load in clustering output for this number of clusters - kmeans_output and clara_output variables are loaded
+  load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', num_clusters, 'clusters.RData', sep=''))
+  
+  pdf_filename = paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/mean_monthly_cases_by_archetype_', num_clusters, 'clusters.pdf', sep='')
+  plot_monthly_cases_by_archetype(base_filepath_raster, ds_shapefile_filepath, num_clusters, clara_output, show_susp_flag=TRUE, show_rescaled_flag=TRUE, show_subplots_flag=TRUE, pdf_flag=FALSE, pdf_filename=pdf_filename)
+}
+```
+
+<b>Rescaled mean case counts within each DS.</b> Each subplot shows the results for DS in an archetype.
+
+  
+</br>
+
+### 8 clusters
+```{r plot_monthly_cases_by_archetype_8clust, message=FALSE, warning=FALSE, fig.width=8, fig.height=16, fig.show='hold'}
+# only do this if the routine surveillance data is available
+if(case_data_available){
+  num_clusters = 8
+  # load in clustering output for this number of clusters - kmeans_output and clara_output variables are loaded
+  load(paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/DS_level_clusterResultObject_', num_clusters, 'clusters.RData', sep=''))
+  
+  
+  pdf_filename = paste(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/mean_monthly_cases_by_archetype_', num_clusters, 'clusters.pdf', sep='')
+  plot_monthly_cases_by_archetype(base_filepath_raster, ds_shapefile_filepath, num_clusters, clara_output, show_susp_flag=TRUE, show_rescaled_flag=TRUE, show_subplots_flag=TRUE, pdf_flag=FALSE, pdf_filename=pdf_filename)
+}
+```
+
+<b>Rescaled mean case counts within each DS.</b> Each subplot shows the results for DS in an archetype.
+
+
+
+
+</br>
+
+### Compare DHS values within a district versus within an archetype
+
+```{r compare_DHS_district_archetype, message=FALSE, warning=FALSE, fig.width=8, fig.height=16, fig.show='hold'}
+source(paste0(base_filepath_scripts, '/explore_clustering_results/DHS_results_by_cluster_versus_by_district.R'))
+# in the left column, plot difference between each cluster value and mean across all clusters in the same district or in the same archetype. point size shows number of participants in cluster. Show archetype results with both num_clusters=num_districts and num_clusters=30
+# in the right column, plot the number of individuals included in the survey in each of the districts/archetypes
+# 
+# MIS_2016_filename = paste0(base_filepath_project, '/explore_DHS/MIS_2016.csv')
+# chiefdom_colname=admin_attribute_name
+# district_colname=region_attribute_name
+# cluster_ids_each_DS_filename = paste0(base_filepath_raster, '/clustering_results/', var_weight_string, '/clusters_by_DS_mean_variable.csv')
+# num_clusters = max_num_clusters
+# pdf_filename=paste0(base_filepath_raster, '/clustering_results/', var_weight_string, '/figures/DHS_observation_versus_district_cluster_mean.pdf')
+# 
+# get_survey_versus_mean_dhs_values(MIS_2016_filename, chiefdom_colname, district_colname, cluster_ids_each_DS_filename, num_clusters,pdf_filename)
+
+
+```
+
+
+  

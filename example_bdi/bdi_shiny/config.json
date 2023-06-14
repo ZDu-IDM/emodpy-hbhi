@@ -1,0 +1,12 @@
+{
+  "credentials":[
+    {
+      "user_name":"user",
+      "password":"pass"
+    },
+    {
+      "user_name":"BDI",
+      "password":"PNILP2021"
+    }
+  ]
+}

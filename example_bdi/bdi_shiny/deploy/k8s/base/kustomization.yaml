@@ -1,0 +1,8 @@
+namespace: malaria-apps
+
+commonLabels:
+  app: bhi-hbhi
+
+resources:
+  - deployment.yaml
+  - service.yaml
