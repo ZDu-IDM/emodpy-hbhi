@@ -1,8 +1,0 @@
-.idea/
-
-# Deployments
-ignore-*
-*.key
-*.env
-run.log
-tags.json
