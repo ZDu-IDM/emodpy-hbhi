@@ -1,8 +1,9 @@
 import os
 import pandas as pd
-from simulation.load_paths import load_box_paths
+from snt.load_paths import load_box_paths
 
-data_path, project_path = load_box_paths(country_name='Burundi')
+USER_PATH = r'C:\Projects\emodpy-hbhi_zdu\data'
+data_path, project_path = load_box_paths(user_path=USER_PATH, country_name='Burundi')
 
 wdir = os.path.join(project_path, 'simulation_inputs')
 future_projections = True

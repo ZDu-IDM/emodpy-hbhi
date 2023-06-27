@@ -1,8 +1,13 @@
-from simtools.Analysis.SSMTAnalysis import SSMTAnalysis
-from simtools.SetupParser import SetupParser
-from simulation.analyzers.analyze_helpers import monthlyU1PfPRAnalyzer, monthlyU5PfPRAnalyzer, monthlyTreatedCasesAnalyzer, monthlySevereTreatedByAgeAnalyzer, MonthlyNewInfectionsAnalyzer, monthlyEventAnalyzer, MonthlyNewInfectionsAnalyzer_withU5, monthlyUsageLLIN
-from simulation.analyzers.analyze_vector_numbers import VectorNumbersAnalyzer
-from simtools.Utilities.COMPSUtilities import get_most_recent_experiment_id_by_name
+# from simtools.Analysis.SSMTAnalysis import SSMTAnalysis
+# from simtools.SetupParser import SetupParser
+from snt.analyzers.analyze_helpers import monthlyU1PfPRAnalyzer, monthlyU5PfPRAnalyzer, monthlyTreatedCasesAnalyzer, monthlySevereTreatedByAgeAnalyzer, MonthlyNewInfectionsAnalyzer, monthlyEventAnalyzer, MonthlyNewInfectionsAnalyzer_withU5, monthlyUsageLLIN
+from snt.analyzers.analyze_vector_numbers import VectorNumbersAnalyzer
+from snt.Utilities.COMPSUtilities import get_most_recent_experiment_id_by_name
+
+from idmtools.analysis.platform_anaylsis import PlatformAnalysis
+from idmtools.analysis.analyze_manager import AnalyzeManager
+from idmtools.core import ItemType
+from idmtools.core.platform_factory import Platform
 
 wi_name_base = "ssmt_analyzer_"
 working_dir = '.'
@@ -50,8 +55,9 @@ climate_only_flag = False
 
 if __name__ == "__main__":
 
-    SetupParser.default_block = 'HPC'
-    SetupParser.init()
+    # SetupParser.default_block = 'HPC'
+    # SetupParser.init()
+    platform = Platform('Calculon')
 
     if not bool(experiments):
         for ee in range(len(experiment_numbers)):
@@ -132,7 +138,7 @@ if __name__ == "__main__":
         else:
             args_treat_case = args_each
         if end_year > 2022:
-            analysis = SSMTAnalysis(experiment_ids=[exp_id],
+            analysis = PlatformAnalysis(experiment_ids=[exp_id],
                                     analyzers=analyzers,
                                     analyzers_args=[
                                                     args_each,
@@ -147,7 +153,7 @@ if __name__ == "__main__":
                                                     ],
                                     analysis_name=wi_name)
         else:
-            analysis = SSMTAnalysis(experiment_ids=[exp_id],
+            analysis = PlatformAnalysis(experiment_ids=[exp_id],
                                     analyzers=analyzers,
                                     analyzers_args=[
                                         args_each,

@@ -1,7 +1,8 @@
 # find the xLH value for each admin-seed combination that best matches the reference DHS data
 import pandas as pd
 import numpy as np
-from calibtool import LL_calculators
+# from calibtool import LL_calculators
+from idmtools_calibra.utilities import ll_calculators
 import datetime
 import os
 import copy
@@ -13,7 +14,8 @@ import matplotlib as mpl
 
 mpl.rcParams['pdf.fonttype'] = 42
 
-data_path, project_path = load_box_paths(country_name='Example')
+USER_PATH = r'C:\Projects\emodpy-hbhi_zdu\data'
+data_path, project_path = load_box_paths(user_path=USER_PATH, country_name='Example')
 
 
 def load_ref_data():
@@ -121,7 +123,7 @@ def return_all_df_vars(mult_param, all_dhs_df, hfca, df, run_number):
         # merge simulation output into dhs dataframe (for matching month, year values)
         dhs_sim = dhs_df.merge(sdf, on=['admin_name', 'month', 'year'])
         score = np.sum(
-            [LL_calculators.beta_binomial(raw_nobs=[x1], sim_nobs=[x2], raw_data=[x3], sim_data=[x4]) for
+            [ll_calculators.beta_binomial(raw_nobs=[x1], sim_nobs=[x2], raw_data=[x3], sim_data=[x4]) for
              x1, x2, x3, x4 in zip(dhs_sim['num_tested'].values,
                                    dhs_sim['sim_pop'].values,
                                    dhs_sim['num_pos'].values,

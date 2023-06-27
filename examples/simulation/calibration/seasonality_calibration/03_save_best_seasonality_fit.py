@@ -7,7 +7,8 @@ import sys
 sys.path.append('../')
 from simulation.load_paths import load_box_paths
 
-data_path, project_path = load_box_paths(country_name='Example')
+USER_PATH = r'C:\Projects\emodpy-hbhi_zdu\data'
+data_path, project_path = load_box_paths(user_path=USER_PATH, country_name='Example')
 admin_names = ['AA']
 constant_habitat = 4  # must match what was used for seasonality calibration
 

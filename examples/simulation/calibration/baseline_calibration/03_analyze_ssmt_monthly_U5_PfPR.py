@@ -1,11 +1,16 @@
 # running the SSMT analyzer will create output files on COMPS in the Work Items section.
 
-from simtools.Analysis.SSMTAnalysis import SSMTAnalysis
-from simtools.SetupParser import SetupParser
+# from simtools.Analysis.SSMTAnalysis import SSMTAnalysis
+# from simtools.SetupParser import SetupParser
 from simulation.analyzers.analyze_monthly_pfpr_u5 import MonthlyPfPRU5Analyzer
 import os
 import sys
 sys.path.append('../../')
+
+from idmtools.analysis.platform_anaylsis import PlatformAnalysis
+from idmtools.analysis.analyze_manager import AnalyzeManager
+from idmtools.core import ItemType
+from idmtools.core.platform_factory import Platform
 
 experiments = {
     'PfPR_sweep_main_example': '1b983581-a50b-ee11-aa07-b88303911bc1'
@@ -16,8 +21,9 @@ end_year = 2017
 working_dir = "."
 
 if __name__ == "__main__":
-    SetupParser.default_block = 'HPC'
-    SetupParser.init()
+    # SetupParser.default_block = 'HPC'
+    # SetupParser.init()
+    platform = Platform('Calculon')
 
     analyzers = [
         MonthlyPfPRU5Analyzer
@@ -41,7 +47,7 @@ if __name__ == "__main__":
                      'start_year': start_year,
                      'end_year': end_year
                      }
-        analysis = SSMTAnalysis(experiment_ids=[exp_id],
+        analysis = PlatformAnalysis(experiment_ids=[exp_id],
                                 analyzers=analyzers,
                                 analyzers_args=[args_each]*len(analyzers),
                                 analysis_name=wi_name)

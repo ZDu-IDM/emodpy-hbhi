@@ -985,7 +985,7 @@ def add_all_interventions(campaign, hfca,
             if has_irs > 0:
                 event_list.append('Received_IRS')
 
-        if inv == 'SMC' and not df.empty:
+        elif inv == 'SMC' and not df.empty:
             # TODO: this line seems not necessary!
             has_smc = update_smc_access_ips(campaign, smc_df=df, hfca=hfca)
             if use_smc_vaccine_proxy:
@@ -998,7 +998,7 @@ def add_all_interventions(campaign, hfca,
             if has_smc > 0:
                 event_list.append('Received_Campaign_Drugs')
 
-        if inv == 'PMC' and not df.empty:
+        elif inv == 'PMC' and not df.empty:
             has_pmc = add_ds_vaccpmc(campaign, pmc_df=df, hfca=hfca)  # per default use vaccpmc
             if has_pmc > 0:
                 event_list = event_list + [
@@ -1009,7 +1009,7 @@ def add_all_interventions(campaign, hfca,
             if has_vacc > 0:
                 event_list = event_list + ['Received_Vaccine']
 
-        if inv == 'ITN':
+        elif inv == 'ITN':
             itn_anc_df = int_map.get('ITN_ANC', pd.DataFrame())
             itn_epi_df = int_map.get('ITN_EPI', pd.DataFrame())
             itn_chw_df = int_map.get('ITN_CHW', pd.DataFrame())
@@ -1031,7 +1031,7 @@ def add_all_interventions(campaign, hfca,
                     event_list.append('Bednet_Using')
                     event_list.append('Bednet_Discarded')
 
-        if inv == 'CM' and not df.empty:
+        elif inv == 'CM' and not df.empty:
             # case management for malaria
             has_cm = add_hfca_hs(campaign, df, hfca, seed_index=seed_index)
             if has_cm:

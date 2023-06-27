@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from COMPS.Data import Experiment, QueryCriteria, Simulation
 # from simtools.Analysis.BaseAnalyzers import BaseAnalyzer as RealBaseAnalyzer
-from simtools.Utilities.SimulationDirectoryMap import SimulationDirectoryMap
+from snt.utility.SimulationDirectoryMap import SimulationDirectoryMap
 import datetime
 import os
 import sys
