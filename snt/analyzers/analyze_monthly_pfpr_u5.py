@@ -1,10 +1,11 @@
 import os
 import numpy as np
 import pandas as pd
-from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
+# from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
+from idmtools.entities import IAnalyzer
 
 
-class MonthlyPfPRU5Analyzer(BaseAnalyzer):
+class MonthlyPfPRU5Analyzer(IAnalyzer):
 
     def __init__(self, expt_name, sweep_variables=None, working_dir=".", start_year=2010, end_year=2016,
                  input_filename_base='MalariaSummaryReport_Monthly'):
@@ -19,7 +20,7 @@ class MonthlyPfPRU5Analyzer(BaseAnalyzer):
         self.end_year = end_year
 
 
-    def select_simulation_data(self, data, simulation):
+    def map(self, data, simulation):
 
         adf = pd.DataFrame()
         aa = 1  # index for the 0.5-5 year age group
@@ -43,7 +44,7 @@ class MonthlyPfPRU5Analyzer(BaseAnalyzer):
                 adf[sweep_var] = simulation.tags[sweep_var]
         return adf
 
-    def finalize(self, all_data):
+    def reduce(self, all_data):
 
         selected = [data for sim, data in all_data.items()]
         if len(selected) == 0:

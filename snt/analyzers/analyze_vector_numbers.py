@@ -1,14 +1,16 @@
 import pandas as pd
 import numpy as np
-from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
+# from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
 import datetime
 import os
 import sys
+from idmtools.entities import IAnalyzer
+
 sys.path.append('../')
 
 
 
-class VectorNumbersAnalyzer(BaseAnalyzer):
+class VectorNumbersAnalyzer(IAnalyzer):
 
     @classmethod
     def monthparser(self, x):
@@ -30,7 +32,7 @@ class VectorNumbersAnalyzer(BaseAnalyzer):
     # def filter(self, simulation):
     #     return simulation.status.name == 'Succeeded'
 
-    def select_simulation_data(self, data, simulation):
+    def map(self, data, simulation):
 
         simdata = pd.DataFrame({x: data[self.filenames[0]]['Channels'][x]['Data'] for x in self.inset_channels})
         simdata['Time'] = simdata.index
@@ -44,7 +46,7 @@ class VectorNumbersAnalyzer(BaseAnalyzer):
                 simdata[sweep_var] = simulation.tags[sweep_var]
         return simdata
 
-    def finalize(self, all_data):
+    def reduce(self, all_data):
 
         selected = [data for sim, data in all_data.items()]
         if len(selected) == 0:

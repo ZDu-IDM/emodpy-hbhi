@@ -6,14 +6,16 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 
-from calibtool import LL_calculators
-from simtools.Analysis.BaseAnalyzers import BaseCalibrationAnalyzer
+# from calibtool import LL_calculators
+from idmtools_calibra.utilities import ll_calculators
+# from simtools.Analysis.BaseAnalyzers import BaseCalibrationAnalyzer
+from idmtools.entities import IAnalyzer
 
 
 logger = logging.getLogger(__name__)
 
 
-class ChannelByMultiYearSeasonCohortInsetAnalyzer(BaseCalibrationAnalyzer):
+class ChannelByMultiYearSeasonCohortInsetAnalyzer(IAnalyzer):
     """
     Base class implementation for similar comparisons of age-binned reference data to simulation output.
     """
@@ -25,7 +27,7 @@ class ChannelByMultiYearSeasonCohortInsetAnalyzer(BaseCalibrationAnalyzer):
         else:
             return datetime.datetime.strptime(str(x), '%j').month
 
-    def __init__(self, site, weight=1, compare_fn=LL_calculators.gamma_poisson_pandas, **kwargs):
+    def __init__(self, site, weight=1, compare_fn=ll_calculators.gamma_poisson_pandas, **kwargs):
         super().__init__(reference_data=site.get_reference_data('entomology_by_season'),
                          weight=weight,
                          filenames=['output/ReportEventCounter.json',
@@ -39,7 +41,7 @@ class ChannelByMultiYearSeasonCohortInsetAnalyzer(BaseCalibrationAnalyzer):
         self.compare_fn = compare_fn
         self.site_name = site.name
 
-    def select_simulation_data(self, data, simulation):
+    def map(self, data, simulation):
         """
         Extract data from output data and accumulate in same bins as reference.
         """
@@ -85,7 +87,7 @@ class ChannelByMultiYearSeasonCohortInsetAnalyzer(BaseCalibrationAnalyzer):
         """
         return self.compare_fn(self.join_reference(sample, self.reference_data))
 
-    def finalize(self, all_data):
+    def reduce(self, all_data):
         """
         Calculate the output result for each sample.
         """

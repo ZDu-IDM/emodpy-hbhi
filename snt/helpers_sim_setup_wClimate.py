@@ -3,11 +3,11 @@ import pandas as pd
 import numpy as np
 from dtk.interventions.outbreakindividual import recurring_outbreak
 from dtk.vector.species import update_species_param, set_species
-from simtools.Utilities.Experiments import retrieve_experiment
-from simtools.Utilities.COMPSUtilities import COMPS_login
+from snt.utility.Experiments import retrieve_experiment
+from snt.utility.COMPSUtilities import COMPS_login
 from dtk.interventions.property_change import change_individual_property
-from simulation.load_paths import load_box_paths
-from simulation.sim_check_params.update_drug_params import update_drugs
+from snt.load_paths import load_box_paths
+from snt.sim_check_params.update_drug_params import update_drugs
 
 data_path, project_path = load_box_paths(country_name='Nigeria')
 

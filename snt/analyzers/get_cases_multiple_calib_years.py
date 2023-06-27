@@ -1,14 +1,16 @@
 import pandas as pd
 import numpy as np
-from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
+# from simtools.Analysis.BaseAnalyzers import BaseAnalyzer
 import datetime
 import os
 import sys
+from idmtools.entities import IAnalyzer
+
 sys.path.append('../')
 
 
 
-class monthlyTreatedCasesAnalyzer(BaseAnalyzer):
+class monthlyTreatedCasesAnalyzer(IAnalyzer):
 
     @classmethod
     def monthparser(self, x):
@@ -40,7 +42,7 @@ class monthlyTreatedCasesAnalyzer(BaseAnalyzer):
         # return simulation.tags['__sample_index__'] == 0  #!!!
         return simulation
 
-    def select_simulation_data(self, data, simulation):
+    def map(self, data, simulation):
 
         simdata = pd.DataFrame({x: data[self.filenames[0]]['Channels'][x]['Data'] for x in self.channels})
         simdata['Time'] = simdata.index
@@ -61,7 +63,7 @@ class monthlyTreatedCasesAnalyzer(BaseAnalyzer):
                 simdata[sweep_var] = simulation.tags[sweep_var]
         return simdata
 
-    def finalize(self, all_data):
+    def reduce(self, all_data):
 
         selected = [data for sim, data in all_data.items()]
         if len(selected) == 0:
@@ -88,14 +90,20 @@ class monthlyTreatedCasesAnalyzer(BaseAnalyzer):
 
 if __name__ == "__main__":
 
-    from simtools.Analysis.AnalyzeManager import AnalyzeManager
-    from simtools.SetupParser import SetupParser
+    # from simtools.Analysis.AnalyzeManager import AnalyzeManager
+    # from simtools.SetupParser import SetupParser
+
+    from idmtools.analysis.analyze_manager import AnalyzeManager
+    from idmtools.core import ItemType
+    from idmtools.core.platform_factory import Platform
+
 
     from simulation.load_paths import load_box_paths
     data_path, project_path = load_box_paths(country_name='Burundi')
 
-    SetupParser.default_block = 'HPC'
-    SetupParser.init()
+    # SetupParser.default_block = 'HPC'
+    # SetupParser.init()
+    platform = Platform('CALCULOUS')
 
     working_dir = os.path.join(project_path, 'simulation_output', 'seasonality_calibration')
     start_year = 2015#2011
@@ -116,5 +124,5 @@ if __name__ == "__main__":
                                                                       end_year=end_year)
 
         analyzers = [cur_monthlyTreatedCasesAnalyzer]
-        am = AnalyzeManager(expid, analyzers=analyzers, force_analyze=True)
+        am = AnalyzeManager(platform=platform, ids=[expid, ItemType.EXPERIMENT], analyzers=analyzers, force_analyze=True)
         am.analyze()

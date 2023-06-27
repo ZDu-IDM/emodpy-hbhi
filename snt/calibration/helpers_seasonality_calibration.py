@@ -1,12 +1,12 @@
 import pandas as pd
 import os
 import sys
-from simtools.Utilities.Experiments import retrieve_experiment
-from simtools.SetupParser import SetupParser
+# from simtools.Utilities.Experiments import retrieve_experiment
+# from simtools.SetupParser import SetupParser
 sys.path.append('../')
 
-from simulation.load_paths import load_box_paths
-from simulation.helpers_sim_setup import load_master_csv, load_spline_and_scale_factors, habitat_scales
+from snt.load_paths import load_box_paths
+from snt.helpers_sim_setup import load_master_csv, load_spline_and_scale_factors, habitat_scales
 
 
 

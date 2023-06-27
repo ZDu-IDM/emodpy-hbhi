@@ -1,7 +1,7 @@
 import os
 
 
-def load_box_paths(user_path=None, country_name='Nigeria'):
+def load_box_paths(user_path=None, country_name='Burundi'):
     if not user_path:
         user_path = os.path.expanduser('~')
 

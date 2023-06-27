@@ -2,7 +2,8 @@ import logging
 import calendar
 from abc import ABCMeta
 
-from calibtool.CalibSite import CalibSite
+# from calibtool.CalibSite import CalibSite
+from idmtools_calibra.calib_site import CalibSite
 
 from simulation.calibration.ChannelByMultiYearSeasonCohortInsetAnalyzer import ChannelByMultiYearSeasonCohortInsetAnalyzer
 from simulation.calibration.helpers_seasonality_calibration import get_cases
