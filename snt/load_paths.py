@@ -1,11 +1,15 @@
 import os
 
 
-def load_box_paths(user_path=None, country_name='Burundi'):
+def load_box_paths(user_path=None, country_name='Example'):
     if not user_path:
         user_path = os.path.expanduser('~')
 
-    if country_name == 'SierraLeone':
+    if country_name == 'Example':
+        home_path = os.path.join(user_path, 'Documents', 'malaria-snt-core/example_for_migration')
+        data_path = home_path
+        project_path = os.path.join(home_path, 'example_files')
+    elif country_name == 'SierraLeone':
         home_path = os.path.join(user_path, 'Dropbox (IDM)', 'Malaria Team Folder')
         data_path = os.path.join(home_path, 'data')
         project_path = os.path.join(home_path, 'projects', 'SierraLeone_hbhi')
